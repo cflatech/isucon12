@@ -80,36 +80,53 @@ class Handlers
         }
     }
 
+    const PATTERN = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx';
+
+    private function dispenseID(): string
+    {
+        $chars = str_split(self::PATTERN);
+
+        foreach ($chars as $i => $char) {
+            if ($char === 'x') {
+                $chars[$i] = dechex(random_int(0, 15));
+            } elseif ($char === 'y') {
+                $chars[$i] = dechex(random_int(8, 11));
+            }
+        }
+
+        return implode('', $chars);
+    }
+
     /**
      * システム全体で一意なIDを生成する
      */
-    private function dispenseID(): string
-    {
-        $id = 0;
-        /** @var ?\Exception $lastErr */
-        $lastErr = null;
-        for ($i = 0; $i < 100; $i++) {
-            try {
-                $this->adminDB->prepare('REPLACE INTO id_generator (stub) VALUES (?);')
-                    ->executeStatement(['a']);
-            } catch (DBException $e) {
-                if ($e->getCode() === 1213) { // deadlock
-                    $lastErr = $e;
-                    continue;
-                }
-                throw $e;
-            }
+    // private function dispenseID(): string
+    // {
+    //     $id = 0;
+    //     /** @var ?\Exception $lastErr */
+    //     $lastErr = null;
+    //     for ($i = 0; $i < 100; $i++) {
+    //         try {
+    //             $this->adminDB->prepare('REPLACE INTO id_generator (stub) VALUES (?);')
+    //                 ->executeStatement(['a']);
+    //         } catch (DBException $e) {
+    //             if ($e->getCode() === 1213) { // deadlock
+    //                 $lastErr = $e;
+    //                 continue;
+    //             }
+    //             throw $e;
+    //         }
 
-            $id = $this->adminDB->lastInsertId();
-            break;
-        }
+    //         $id = $this->adminDB->lastInsertId();
+    //         break;
+    //     }
 
-        if ($id !== 0) {
-            return sprintf('%x', $id);
-        }
+    //     if ($id !== 0) {
+    //         return sprintf('%x', $id);
+    //     }
 
-        throw $lastErr;
-    }
+    //     throw $lastErr;
+    // }
 
     /**
      * リクエストヘッダをパースしてViewerを返す
