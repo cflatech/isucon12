@@ -992,8 +992,14 @@ class Handlers
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
         // $fl = $this->flockByTenantID($v->tenantID);
 
-        $pss = $tenantDB->prepare('SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC')
-            ->executeQuery([$tenant['id'], $competitionID])
+        $pss = $tenantDB->prepare('SELECT ps.score, MAX(ps.row_num) as row_num, ps.player_id, p.display_name
+                                    FROM player_score as ps
+                                    JOIN player as p ON ps.player_id = p.id
+                                    WHERE ps.competition_id = ?
+                                    GROUP BY ps.player_id, p.display_name, ps.score
+                                    -- ORDER BY row_num DESC
+                        ')
+            ->executeQuery([$competitionID])
             ->fetchAllAssociative();
 
         /** @var list<CompetitionRank> $ranks */
@@ -1003,16 +1009,18 @@ class Handlers
         foreach ($pss as $ps) {
             // player_scoreが同一player_id内ではrow_numの降順でソートされているので
             // 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
-            if (array_key_exists($ps['player_id'], $scoredPlayerSet)) {
-                continue;
-            }
-            $scoredPlayerSet[$ps['player_id']] = null;
-            $p = $this->retrievePlayer($tenantDB, $ps['player_id']);
+            // if (array_key_exists($ps['player_id'], $scoredPlayerSet)) {
+            //     continue;
+            // }
+            // $scoredPlayerSet[$ps['player_id']] = null;
+            // $p = $this->retrievePlayer($tenantDB, $ps['player_id']);
 
             $ranks[] = new CompetitionRank(
                 score: $ps['score'],
-                playerID: $p->id,
-                playerDisplayName: $p->displayName,
+                // playerID: $p->id,
+                playerID: $ps['player_id'],
+                // playerDisplayName: $p->displayName,
+                playerDisplayName: $ps['display_name'],
                 rowNum: $ps['row_num'],
             );
         }
