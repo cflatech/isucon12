@@ -1,4 +1,4 @@
-SERVER_ID := isu01
+SERVER_ID := isu02
 GIT_USER_EMAIL := "isucon@isucon"
 GIT_USER_NAME := "isucon player"
 APP_IPADDR := 127.0.0.1

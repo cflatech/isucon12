@@ -23,6 +23,8 @@ SYSTEMD_PATH := /etc/systemd/system
 NGINX_LOG := /var/log/nginx/access.log
 DB_SLOW_LOG := /var/log/mysql/mysql-slow.log
 
+$(eval ARCH := $(shell uname -m))
+
 .PHONY: setup
 setup: install-tools git-setup migrate-service
 
@@ -33,8 +35,7 @@ get-conf: check-server-id get-db-conf get-nginx-conf get-service-file get-envsh 
 deploy-conf: check-server-id deploy-db-conf deploy-nginx-conf deploy-service-file deploy-envsh deploy-php-conf
 
 .PHONY: bench
-# bench: check-server-id mv-logs build deploy-conf restart watch-service-log
-bench: check-server-id mv-logs build restart watch-service-log
+bench: check-server-id mv-logs build deploy-conf restart watch-service-log
 
 .PHONY: bench-dev
 bench-dev: bench
@@ -44,13 +45,9 @@ bench-dev: bench
 .PHONY: alp
 alp:
 	sudo alp json --file=$(NGINX_LOG) --config=./tool-config/alp/config.yml
-	# sudo alp json --file=$(NGINX_LOG)
 
 .PHONY: slow-query
 slow-query:
-# ifeq ("$(wildcard $(DB_SLOW_LOG))", "")
-# 	$(error $(DB_SLOW_LOG) not found)
-# endif
 	sudo pt-query-digest $(DB_SLOW_LOG)
 
 .PHONY: alp-diff
@@ -77,9 +74,7 @@ install-tools:
 	sudo apt-get -y install percona-toolkit htop dstat git unzip tree
 
 	# alp
-	IS_ARM := $(shell uname -a | grep aarch64)
-
-ifeq ("$(IS_ARM)", "")
+ifeq ($(ARCH), x86_64)
 	curl -L https://github.com/tkuchiki/alp/releases/download/v1.0.10/alp_linux_amd64.zip -o alp.zip
 else
 	curl -L https://github.com/tkuchiki/alp/releases/download/v1.0.10/alp_linux_arm64.zip -o alp.zip
@@ -172,12 +167,12 @@ deploy-php-conf:
 mv-logs:
 	$(eval when := $(shell date "+%Y%m%d-%H%M%S"))
 	mkdir -p $(PROJECT_ROOT)/logs/$(when)/nginx $(PROJECT_ROOT)/logs/$(when)/mysql
-# ifneq ("$(wildcard $(NGINX_LOG))", "")
+ifneq ("$(wildcard $(NGINX_LOG))", "")
 	sudo mv -f $(NGINX_LOG) $(PROJECT_ROOT)/logs/$(when)/nginx
-# endif
-# ifneq ("$(wildcard $(DB_SLOW_LOG))", "")
+endif
+ifneq ("$(wildcard $(DB_SLOW_LOG))", "")
 	sudo mv -f $(DB_SLOW_LOG) $(PROJECT_ROOT)/logs/$(when)/mysql
-# endif
+endif
 
 .PHONY: build
 build:
