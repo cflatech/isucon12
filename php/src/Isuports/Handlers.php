@@ -885,36 +885,40 @@ class Handlers
             throw new HttpNotFoundException($request, 'player not found');
         }
 
-        $cs = $tenantDB->prepare('SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC')
-            ->executeQuery([$v->tenantID])
+        // $cs = $tenantDB->prepare('SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC')
+        //     ->executeQuery([$v->tenantID])
+        //     ->fetchAllAssociative();
+
+        // // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+        // // $fl = $this->flockByTenantID($v->tenantID);
+
+        // $pss = [];
+        // foreach ($cs as $c) {
+        //     $ps = $tenantDB->prepare('SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1')
+        //         ->executeQuery([$v->tenantID, $c['id'], $p->id])
+        //         ->fetchAssociative();
+        //     // 行がない = スコアが記録されてない
+        //     if ($ps === false) {
+        //         continue;
+        //     }
+
+        //     $pss[] = $ps;
+        // }
+
+        $pss = $tenantDB->prepare('SELECT p.score, MIN(p.row_num), c.title FROM player_score as p JOIN competition as c ON p.competition_id = c.id WHERE player_id = ? GROUP BY p.player_id, p.score, c.title')
+            ->executeQuery([$p->id])
             ->fetchAllAssociative();
-
-        // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-        // $fl = $this->flockByTenantID($v->tenantID);
-
-        $pss = [];
-        foreach ($cs as $c) {
-            $ps = $tenantDB->prepare('SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1')
-                ->executeQuery([$v->tenantID, $c['id'], $p->id])
-                ->fetchAssociative();
-            // 行がない = スコアが記録されてない
-            if ($ps === false) {
-                continue;
-            }
-
-            $pss[] = $ps;
-        }
 
         /** @var list<PlayerScoreDetail> $psds */
         $psds = [];
         foreach ($pss as $ps) {
-            $comp = $this->retrieveCompetition($tenantDB, $ps['competition_id']);
-            if (is_null($comp)) {
-                throw new RuntimeException('error retrieveCompetition');
-            }
+            // $comp = $this->retrieveCompetition($tenantDB, $ps['competition_id']);
+            // if (is_null($comp)) {
+            //     throw new RuntimeException('error retrieveCompetition');
+            // }
 
             $psds[] = new PlayerScoreDetail(
-                competitionTitle: $comp->title,
+                competitionTitle: $ps['title'],
                 score: $ps['score'],
             );
         }
