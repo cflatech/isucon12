@@ -386,23 +386,37 @@ class Handlers
     /**
      * 大会ごとの課金レポートを計算する
      */
-    private function billingReportByCompetition(Connection $tenantDB, int $tenantID, string $competitionID): BillingReport
+    private function billingReportByCompetition(Connection $tenantDB, int $tenantID, array $competition): BillingReport
     {
-        $comp = $this->retrieveCompetition($tenantDB, $competitionID);
-        if (is_null($comp)) {
-            throw new RuntimeException('error retrieveCompetition');
+        if (is_null($competition['finished_at'])) {
+            return new BillingReport(
+                competitionID: $competition['id'],
+                competitionTitle: $competition['title'],
+                playerCount: 0,
+                visitorCount:0,
+                billingPlayerYen: 0, // スコアを登録した参加者は100円
+                billingVisitorYen: 0, // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
+                billingYen: 0,
+            );
         }
+
+        // $comp = $this->retrieveCompetition($tenantDB, $competition['id']);
+        // if (is_null($comp)) {
+        //     throw new RuntimeException('error retrieveCompetition');
+        // }
 
         // ランキングにアクセスした参加者のIDを取得する
         $vhs = $this->adminDB->prepare('SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id')
-            ->executeQuery([$tenantID, $comp->id])
+            // ->executeQuery([$tenantID, $comp->id])
+            ->executeQuery([$tenantID, $competition["id"]])
             ->fetchAllAssociative();
 
         /** @var array<string, string> $billingMap */
         $billingMap = [];
         foreach ($vhs as $vh) {
             // competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
-            if (!is_null($comp->finishedAt) && $comp->finishedAt < $vh['min_created_at']) {
+            // if (!is_null($comp->finishedAt) && $comp->finishedAt < $vh['min_created_at']) {
+            if (!is_null($competition['finished_at']) && $competition['finished_at'] < $vh['min_created_at']) {
                 continue;
             }
             $billingMap[$vh['player_id']] = 'visitor';
@@ -413,7 +427,7 @@ class Handlers
 
         // スコアを登録した参加者のIDを取得する
         $scoredPlayerIDs = $tenantDB->prepare('SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?')
-            ->executeQuery([$tenantID, $comp->id])
+            ->executeQuery([$tenantID, $competition['id']])
             ->fetchFirstColumn();
         foreach ($scoredPlayerIDs as $pid) {
             // スコアが登録されている参加者
@@ -423,16 +437,14 @@ class Handlers
         // 大会が終了している場合のみ請求金額が確定するので計算する
         $playerCount = 0;
         $visitorCount = 0;
-        if (!is_null($comp->finishedAt)) {
-            $counts = array_count_values($billingMap);
-            $playerCount = $counts['player'] ?? 0;
-            $visitorCount =  $counts['visitor'] ?? 0;
-        }
+	$counts = array_count_values($billingMap);
+	$playerCount = $counts['player'] ?? 0;
+	$visitorCount =  $counts['visitor'] ?? 0;
 
 
         return new BillingReport(
-            competitionID: $comp->id,
-            competitionTitle: $comp->title,
+            competitionID: $competition['id'],
+	    competitionTitle: $competition['title'],
             playerCount: $playerCount,
             visitorCount: $visitorCount,
             billingPlayerYen: 100 * $playerCount, // スコアを登録した参加者は100円
@@ -496,7 +508,8 @@ class Handlers
                 ->fetchAllAssociative();
 
             foreach ($cs as $comp) {
-                $report = $this->billingReportByCompetition($tenantDB, $t['id'], $comp['id']);
+                // $report = $this->billingReportByCompetition($tenantDB, $t['id'], $comp['id']);
+                $report = $this->billingReportByCompetition($tenantDB, $t['id'], $comp);
                 $tb->billingYen += $report->billingYen;
             }
 
@@ -844,7 +857,8 @@ class Handlers
         /** @var list<BillingReport> $tbrs */
         $tbrs = [];
         foreach ($cs as $comp) {
-            $tbrs[] = $this->billingReportByCompetition($tenantDB, $v->tenantID, $comp['id']);
+            // $tbrs[] = $this->billingReportByCompetition($tenantDB, $v->tenantID, $comp['id']);
+            $tbrs[] = $this->billingReportByCompetition($tenantDB, $v->tenantID, $comp);
         }
 
         $res = new SuccessResult(
