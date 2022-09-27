@@ -23,6 +23,9 @@ RUN docker-php-ext-configure zip && \
   docker-php-ext-install zip && \
   docker-php-ext-install pdo_mysql
 
+RUN pecl install redis && \
+  docker-php-ext-enable redis
+
 RUN useradd --uid=1001 --create-home isucon
 USER isucon
 RUN mkdir -p /home/isucon/webapp/php

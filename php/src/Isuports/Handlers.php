@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Isuports;
 
+use Redis;
 use Doctrine\DBAL\Configuration;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
@@ -821,6 +822,7 @@ class Handlers
         $query = "INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES ";
 
         $values = [];
+        $playerScoreByPlayerIds = [];
         foreach ($playerScoreRows as $ps) {
             $values[] = '(' .
                 '"' . $ps['id'] . '",' .
@@ -832,9 +834,19 @@ class Handlers
                 $ps['created_at'] . "," .
                 $ps['updated_at'] .
             ")";
+
+            $playerScoreByPlayerIds[$ps['id']][] = $ps;
         }
         $query .= implode(",", $values);
         $tenantDB->executeQuery($query);
+
+        $redis = new Redis();
+        $redis->connect('127.0.0.1', 6379);
+
+        foreach ($playerScoreByPlayerIds as $key => $value) {
+            $redis->set($key, serialize($value));
+        }
+
 
         // foreach ($playerScoreRows as $ps) {
         //     $tenantDB->prepare('INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)')
@@ -937,9 +949,18 @@ class Handlers
         //     $pss[] = $ps;
         // }
 
-        $pss = $tenantDB->prepare('SELECT p.score, MIN(p.row_num), c.title FROM player_score as p JOIN competition as c ON p.competition_id = c.id WHERE player_id = ? GROUP BY p.player_id, p.score, c.title')
+
+        $redis = new Redis();
+        $redis->connect('127.0.0.1', 6379);
+        $pss = $redis->get($p->id);
+
+        if ($pss == false) {
+            $pss = $tenantDB->prepare('SELECT p.score, MIN(p.row_num), c.title FROM player_score as p JOIN competition as c ON p.competition_id = c.id WHERE player_id = ? GROUP BY p.player_id, p.score, c.title')
             ->executeQuery([$p->id])
             ->fetchAllAssociative();
+        } else {
+            $pss = unserialize($pss);
+        }
 
         /** @var list<PlayerScoreDetail> $psds */
         $psds = [];
