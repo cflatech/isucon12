@@ -818,10 +818,28 @@ class Handlers
         $tenantDB->prepare('DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?')
             ->executeStatement([$v->tenantID, $competitionID]);
 
+        $query = "INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES ";
+
+        $values = [];
         foreach ($playerScoreRows as $ps) {
-            $tenantDB->prepare('INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)')
-                ->executeStatement($ps);
+            $values[] = '(' .
+                '"' . $ps['id'] . '",' .
+                '"' . $ps['tenant_id'] . '",' .
+                '"' . $ps['player_id'] . '",' .
+                '"' . $ps['competition_id'] . '",' .
+                $ps['score'] . "," .
+                $ps['row_num'] . "," .
+                $ps['created_at'] . "," .
+                $ps['updated_at'] .
+            ")";
         }
+        $query .= implode(",", $values);
+        $tenantDB->executeQuery($query);
+
+        // foreach ($playerScoreRows as $ps) {
+        //     $tenantDB->prepare('INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)')
+        //         ->executeStatement($ps);
+        // }
 
         $tenantDB->executeQuery('COMMIT');
         $tenantDB->close();
@@ -1005,7 +1023,8 @@ class Handlers
 
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
         // $fl = $this->flockByTenantID($v->tenantID);
-
+        // TODO: キャッシュから取得
+        // TODO: score保存時にキャッシュする
         $pss = $tenantDB->prepare('SELECT ps.score, MAX(ps.row_num) as row_num, ps.player_id, p.display_name
                                     FROM player_score as ps
                                     JOIN player as p ON ps.player_id = p.id
