@@ -620,21 +620,21 @@ class Handlers
 
         /** @var list<PlayerDetail> $pds */
         $pds = [];
+        $statements = [];
         foreach ($displayNames as $displayName) {
             $id = $this->dispenseID();
 
             $now = time();
-            $tenantDB->prepare('INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
-                ->executeStatement([$id, $v->tenantID, $displayName, false, $now, $now]);
-
-            $p = $this->retrievePlayer($tenantDB, $id);
+            $statements[] = sprintf('("%s", "%s", "%s", false, %d, %d)', $id, $v->tenantID, $displayName, $now, $now);
 
             $pds[] = new PlayerDetail(
-                id: $p->id,
-                displayName: $p->displayName,
-                isDisqualified: $p->isDisqualified,
+                id: $id,
+                displayName: $displayName,
+                isDisqualified: false,
             );
         }
+
+        $tenantDB->executeQuery(sprintf('INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES %s', implode(",", $statements)));
 
         $res = new PlayersAddHandlerResult(players: $pds);
 
