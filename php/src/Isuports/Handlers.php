@@ -470,6 +470,24 @@ class Handlers
         $playerCount = $counts['player'] ?? 0;
         $visitorCount =  $counts['visitor'] ?? 0;
 
+        $this->adminDB->prepare('INSERT INTO report_billing (
+            competition_id,
+            competition_title,
+            player_count,
+            visitor_count,
+            billing_player_yen,
+            billing_visitor_yen,
+            billing_yen)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+        ')->executeStatement([
+            $competition['id'],
+            $competition['title'],
+            $playerCount,
+            $visitorCount,
+            100 * $playerCount, // スコアを登録した参加者は100円
+            10 * $visitorCount, // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
+            100 * $playerCount + 10 * $visitorCount,
+        ]);
 
         return new BillingReport(
             competitionID: $competition['id'],
