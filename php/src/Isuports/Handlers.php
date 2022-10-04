@@ -401,10 +401,38 @@ class Handlers
             );
         }
 
-        // $comp = $this->retrieveCompetition($tenantDB, $competition['id']);
-        // if (is_null($comp)) {
-        //     throw new RuntimeException('error retrieveCompetition');
-        // }
+        $report = $this->adminDB->prepare('SELECT
+                competition_id,
+                competition_title,
+                player_count,
+                visitor_count,
+                billing_player_yen,
+                billing_visitor_yen,
+                billing_yen
+            FROM
+                report_billing
+            WHERE
+                competition_id = ?
+        ')->executeQuery([
+            $competition['id']
+        ])->fetchAssociative();
+
+        if ($report != false) {
+            return new BillingReport(
+                competitionID: $report['competition_id'],
+	         competitionTitle: $report['competition_title'],
+                playerCount: $report['player_count'],
+                visitorCount: $report['visitor_count'],
+                billingPlayerYen: $report['billing_player_yen'],
+                billingVisitorYen: $report['billing_visitor_yen'],
+                billingYen: $report['billing_yen'],
+            );
+        }
+
+        $comp = $this->retrieveCompetition($tenantDB, $competition['id']);
+        if (is_null($comp)) {
+            throw new RuntimeException('error retrieveCompetition');
+        }
 
         // ランキングにアクセスした参加者のIDを取得する
         $vhs = $this->adminDB->prepare('SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id')
@@ -438,9 +466,9 @@ class Handlers
         // 大会が終了している場合のみ請求金額が確定するので計算する
         $playerCount = 0;
         $visitorCount = 0;
-	$counts = array_count_values($billingMap);
-	$playerCount = $counts['player'] ?? 0;
-	$visitorCount =  $counts['visitor'] ?? 0;
+        $counts = array_count_values($billingMap);
+        $playerCount = $counts['player'] ?? 0;
+        $visitorCount =  $counts['visitor'] ?? 0;
 
 
         return new BillingReport(
@@ -704,16 +732,76 @@ class Handlers
             throw new HttpBadRequestException($request, 'competition_id required');
         }
 
+        $competition = $this->retrieveCompetition($tenantDB, $id);
         // 存在しない大会
-        if (is_null($this->retrieveCompetition($tenantDB, $id))) {
+        if (is_null($competition)) {
             throw new HttpNotFoundException($request, 'competition not found');
         }
 
         $now = time();
-        $tenantDB->prepare('UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?')
-            ->executeStatement([$now, $now, $id]);
+        $tenantDB->prepare('UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?')->executeStatement([$now, $now, $id]);
+        $this->saveBillingReport($tenantDB, $v->tenantID, $competition);
 
         return $this->jsonResponse($response, new SuccessResult(success: true));
+    }
+
+    private function saveBillingReport(Connection $tenantDB, int $tenantID, CompetitionRow $competition) {
+        // ランキングにアクセスした参加者のIDを取得する
+        $vhs = $this->adminDB->prepare('SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id')
+            // ->executeQuery([$tenantID, $comp->id])
+            ->executeQuery([$tenantID, $competition->id])
+            ->fetchAllAssociative();
+        $this->logger->debug("save");
+        $this->logger->debug($competition->id);
+        /** @var array<string, string> $billingMap */
+        $billingMap = [];
+        foreach ($vhs as $vh) {
+            // competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
+            // if (!is_null($comp->finishedAt) && $comp->finishedAt < $vh['min_created_at']) {
+            // if (!is_null($competition->finishedAt) && $competition->finishedAt < $vh['min_created_at']) {
+            //     continue;
+            // }
+            $billingMap[$vh['player_id']] = 'visitor';
+        }
+
+        // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+        // $fl = $this->flockByTenantID($tenantID);
+
+        // スコアを登録した参加者のIDを取得する
+        $scoredPlayerIDs = $tenantDB->prepare('SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?')
+            ->executeQuery([$tenantID, $competition->id])
+            ->fetchFirstColumn();
+        foreach ($scoredPlayerIDs as $pid) {
+            // スコアが登録されている参加者
+            $billingMap[$pid] = 'player';
+        }
+
+        // 大会が終了している場合のみ請求金額が確定するので計算する
+        $playerCount = 0;
+        $visitorCount = 0;
+	    $counts = array_count_values($billingMap);
+	    $playerCount = $counts['player'] ?? 0;
+	    $visitorCount =  $counts['visitor'] ?? 0;
+
+
+        $this->adminDB->prepare('INSERT INTO report_billing (
+            competition_id,
+            competition_title,
+            player_count,
+            visitor_count,
+            billing_player_yen,
+            billing_visitor_yen,
+            billing_yen)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+        ')->executeStatement([
+            $competition->id,
+            $competition->title,
+            $playerCount,
+            $visitorCount,
+            100 * $playerCount,
+            10 * $visitorCount,
+            100 * $playerCount + 10 * $visitorCount,
+        ]);
     }
 
     /**
