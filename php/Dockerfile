@@ -21,10 +21,14 @@ RUN \
 
 RUN docker-php-ext-configure zip && \
   docker-php-ext-install zip && \
-  docker-php-ext-install pdo_mysql
+  docker-php-ext-install pdo_mysql && \
+  docker-php-ext-install opcache
+
 
 RUN pecl install redis && \
   docker-php-ext-enable redis
+
+COPY ./php.ini /usr/local/etc/php/conf.d/php.ini
 
 RUN useradd --uid=1001 --create-home isucon
 USER isucon
