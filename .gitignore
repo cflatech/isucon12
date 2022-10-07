@@ -1,3 +1,4 @@
 sqlite-trace.log
+/sql/dump.sql 
 
 /logs/*
