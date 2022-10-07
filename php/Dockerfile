@@ -13,10 +13,10 @@ RUN apt-get update && \
 
 RUN \
   sed -i \
-    -e 's/pm.max_children = 5/pm.max_children = 10/' \
-    -e 's/pm.start_servers = 2/pm.start_servers = 10/' \
-    -e 's/pm.min_spare_servers = 1/pm.min_spare_servers = 10/' \
-    -e 's/pm.max_spare_servers = 3/pm.max_spare_servers = 10/' \
+    -e 's/pm.max_children = 5/pm.max_children = 80/' \
+    -e 's/pm.start_servers = 2/pm.start_servers = 80/' \
+    -e 's/pm.min_spare_servers = 1/pm.min_spare_servers = 80/' \
+    -e 's/pm.max_spare_servers = 3/pm.max_spare_servers = 80/' \
     /usr/local/etc/php-fpm.d/www.conf
 
 RUN docker-php-ext-configure zip && \
